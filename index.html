@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.5, user-scalable=yes">
+  <title>多人在线·斗地主掷骰子</title>
+  <!-- Font Awesome 4.7 辅助图标, 增加QQ斗地主风格感 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <!-- Socket.io 客户端 -->
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    /* 全局斗地主风格：深蓝渐变、金色边框、圆润阴影 */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Microsoft YaHei', 'Segoe UI', Roboto, sans-serif;
+    }
+    body {
+      background: linear-gradient(145deg, #1e3c4f 0%, #0b2a3b 100%);
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 12px;
+    }
+    #app {
+      width: 100%;
+      max-width: 800px;
+      height: 100%;
+      max-height: 900px;
+      background: #2b5f6b; /* 斗地主经典牌桌底色 */
+      border-radius: 32px 32px 28px 28px;
+      box-shadow: 0 15px 25px rgba(0,0,0,0.7), inset 0 1px 5px rgba(255,215,0,0.6);
+      border: 3px solid #e2c28b;
+      display: flex;
+      flex-direction: column;
+      padding: 12px 12px 10px;
+      position: relative;
+    }
+
+    /* --- 上部区域 1/5 : 显示已选角色玩家列表(头像风格) --- */
+    .top-panel {
+      flex: 1; /* 基于flex: 1 1 0, 整体占比由父级flex-direction:column控制高度比例 */
+      height: 0; /* flex子项收缩规则 */
+      background: rgba(10, 35, 45, 0.85);
+      margin-bottom: 8px;
+      border-radius: 24px 24px 16px 16px;
+      border: 2px solid #ffd966;
+      box-shadow: inset 0 -2px 5px #0e1e24, inset 0 2px 5px #ffe28b;
+      display: flex;
+      flex-direction: column;
+      padding: 10px 12px;
+      color: #ffebc2;
+      overflow-y: auto;
+    }
+    .top-title {
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: #ffd98c;
+      text-shadow: 1px 1px 0 #3d2b1a;
+      margin-bottom: 6px;
+      letter-spacing: 2px;
+    }
+    .online-players {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+    .player-badge {
+      background: radial-gradient(circle at 30% 20%, #f7e6b4, #ca9e4b);
+      padding: 6px 14px;
+      border-radius: 30px;
+      color: #2d1f0b;
+      font-weight: bold;
+      font-size: 0.95rem;
+      border: 2px solid #ffe68f;
+      box-shadow: 0 0 8px #ffbf40;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .player-badge i {
+      color: #8b4513;
+    }
+    .empty-tip {
+      color: #b6dae0;
+      font-style: italic;
+      padding: 6px;
+    }
+
+    /* --- 中部区域 3/5 : 骰子主界面 + 扔按钮 --- */
+    .mid-panel {
+      flex: 3;
+      height: 0;
+      background: #124c34; /* 斗地主经典绿呢 */
+      background-image: radial-gradient(circle at 20% 30%, #276b4b, #0a3523);
+      margin: 6px 0;
+      border-radius: 28px;
+      border: 4px solid #e6c281;
+      box-shadow: inset 0 -6px 0 #6b4e28, inset 0 2px 12px #dbb45c;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+      position: relative;
+    }
+    .dice-area {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 2vw;
+      margin-bottom: 20px;
+    }
+    .dice {
+      width: 15vw;
+      height: 15vw;
+      max-width: 80px;
+      max-height: 80px;
+      min-width: 55px;
+      min-height: 55px;
+      background: #fef9e8;
+      border-radius: 16px;
+      box-shadow: 0 8px 0 #7f5b3a, 0 12px 20px black;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: #3a281c;
+      border: 2px solid #c8a87b;
+      transform: rotate(2deg);
+      transition: all 0.08s;
+    }
+    .roll-btn {
+      background: radial-gradient(circle at 30% 20%, #ffe084, #d4a017);
+      border: 4px solid #ffeaaa;
+      color: #2c1c0a;
+      font-size: 2.4rem;
+      font-weight: 900;
+      padding: 8px 40px;
+      border-radius: 60px;
+      box-shadow: 0 10px 0 #8b6b2c, 0 10px 25px black;
+      letter-spacing: 18px;
+      text-shadow: 4px 4px 0 rgba(255,215,0,0.6);
+      transition: 0.08s;
+      margin-top: 6px;
+      cursor: pointer;
+      border: 2px solid #fff1b8;
+      line-height: 1;
+    }
+    .roll-btn:active {
+      transform: translateY(8px);
+      box-shadow: 0 2px 0 #6b4e28, 0 10px 20px black;
+    }
+    .roll-btn.disabled {
+      opacity: 0.5;
+      transform: none;
+      box-shadow: 0 6px 0 #6b4e28;
+      pointer-events: none;
+    }
+
+    /* --- 下部区域 1/5 : 当前参与角色列表 + 操作区(角色选择) --- */
+    .bottom-panel {
+      flex: 1;
+      height: 0;
+      background: #1f494b;
+      margin-top: 8px;
+      border-radius: 20px 20px 24px 24px;
+      border: 2px solid #fad373;
+      box-shadow: inset 0 1px 8px #dbb058;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .role-list-title {
+      color: #ffefb0;
+      font-size: 0.8rem;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+    }
+    .current-roles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 5px 0 6px;
+    }
+    .role-item {
+      background: #2f2a1f;
+      border: 2px solid #cbb26a;
+      border-radius: 24px;
+      padding: 4px 12px 4px 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #ffe59c;
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+    .kai-btn {
+      background: #f5cb5c;
+      border: none;
+      border-radius: 16px;
+      padding: 4px 12px;
+      color: #232323;
+      font-weight: bold;
+      box-shadow: 0 3px 0 #ad7c33;
+      font-size: 0.8rem;
+      cursor: pointer;
+      margin-left: 5px;
+      transition: 0.05s;
+      border: 1px solid #ffecb0;
+    }
+    .kai-btn:active {
+      transform: translateY(3px);
+      box-shadow: none;
+    }
+    .kai-btn.hidden {
+      display: none;
+    }
+    .role-selector {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 4px;
+      align-items: center;
+      border-top: 1px dashed #eac672;
+      padding-top: 8px;
+    }
+    .role-btn {
+      background: #434343;
+      color: #eee1c5;
+      border: 2px solid #9c8a5a;
+      border-radius: 28px;
+      padding: 6px 14px;
+      font-size: 0.8rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.1s;
+    }
+    .role-btn.available {
+      background: #30663b;
+      border-color: #cbb85a;
+      color: white;
+      box-shadow: 0 0 8px #a3d064;
+    }
+    .role-btn.disabled {
+      opacity: 0.4;
+      pointer-events: none;
+      background: #555;
+    }
+    .user-status {
+      color: #ffe6a6;
+      font-size: 0.75rem;
+      margin-left: auto;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <!-- 上部区域：已选角色玩家列表（在线状态） -->
+  <div class="top-panel">
+    <div class="top-title"><i class="fa fa-users" aria-hidden="true"></i> 在线玩家 · 已参战</div>
+    <div id="onlineList" class="online-players">
+      <span class="empty-tip">暂无玩家，快选角色加入吧</span>
+    </div>
+  </div>
+
+  <!-- 中部区域：骰子战场 + 扔按钮 -->
+  <div class="mid-panel">
+    <div id="diceContainer" class="dice-area">
+      <!-- 5个骰子由js动态生成 -->
+    </div>
+    <div id="rollActionBtn" class="roll-btn">扔</div>
+  </div>
+
+  <!-- 下部区域：当前角色列表（带开按钮） + 角色选择操作区 -->
+  <div class="bottom-panel">
+    <div class="role-list-title">
+      <span><i class="fa fa-male"></i> 本局角色·开牌</span>
+      <span id="gamePhaseInfo" style="color:#ffd966;">等待开局</span>
+    </div>
+    <div id="roleGameList" class="current-roles">
+      <!-- 动态生成参与角色及“开”按钮 -->
+    </div>
+    <div class="role-selector" id="roleSelectorArea">
+      <span style="color:#ffe3a0; font-size:0.8rem;">选角:</span>
+      <!-- 五个角色按钮由js生成 -->
+    </div>
+  </div>
+</div>
+
+<script>
+  (function(){
+    // ---------- 全局变量 & socket 初始化 ----------
+    const socket = io();
+
+    // 当前客户端状态
+    let myRole = null;                // 我自己选择的角色(null表示未选)
+    let allPlayers = [];            // 当前所有在线角色 [{ role, id }]
+    let roundDicePoints = {};       // 本轮各个角色的骰子点数 { role: [d1,d2,d3,d4,d5] }
+    let isRolling = false;         // 是否正在动画中
+    let rollTimer = null;         
+    let kaiVisibleTimer = null;   
+    let currentDisplayRole = null; // 中部骰子正在展示谁的点数
+    let isAllReadyTriggered = false; // 防止重复触发
+
+    // 五个固定角色
+    const FIXED_ROLES = ['建广', '建国', '李川', '凯宁', '鸿晓'];
+    // 当前服务器已占用的角色，同步于 allPlayers
+    let occupiedRoles = [];
+
+    // ---------- DOM 元素 ----------
+    const onlineListDiv = document.getElementById('onlineList');
+    const diceContainer = document.getElementById('diceContainer');
+    const rollBtn = document.getElementById('rollActionBtn');
+    const roleGameListDiv = document.getElementById('roleGameList');
+    const roleSelectorArea = document.getElementById('roleSelectorArea');
+    const gamePhaseInfo = document.getElementById('gamePhaseInfo');
+
+    // ---------- 初始化UI: 5个骰子 ----------
+    function initDiceUI() {
+      diceContainer.innerHTML = '';
+      for (let i = 0; i < 5; i++) {
+        const diceDiv = document.createElement('div');
+        diceDiv.className = 'dice';
+        diceDiv.setAttribute('data-index', i);
+        diceDiv.textContent = '⚀'; // 默认1点
+        diceContainer.appendChild(diceDiv);
+      }
+    }
+    initDiceUI();
+
+    // ---------- 生成角色选择按钮 ----------
+    function renderRoleSelector() {
+      const occupied = allPlayers.map(p => p.role);
+      let html = '';
+      FIXED_ROLES.forEach(role => {
+        const isOccupied = occupied.includes(role);
+        const isMe = myRole === role;
+        // 可用条件: 未被占用 且 我还没选角色
+        const available = !isOccupied && !myRole;
+        // 如果是我自己，显示已选，不可再点
+        const cls = `role-btn ${available ? 'available' : 'disabled'}`;
+        html += `<div class="${cls}" data-role="${role}">${role} ${isMe ? '✓' : (isOccupied ? '⚔️' : '')}</div>`;
+      });
+      roleSelectorArea.innerHTML = `<span style="color:#ffe3a0; font-size:0.8rem;">选角:</span>` + html;
+    }
+
+    // ---------- 更新上部在线列表 (只显示已选角色玩家) ----------
+    function renderOnlinePlayers() {
+      if (allPlayers.length === 0) {
+        onlineListDiv.innerHTML = '<span class="empty-tip">暂无玩家，快选角色加入吧</span>';
+        return;
+      }
+      let str = '';
+      allPlayers.forEach(p => {
+        str += `<div class="player-badge"><i class="fa fa-user-circle"></i> ${p.role}</div>`;
+      });
+      onlineListDiv.innerHTML = str;
+    }
+
+    // ---------- 渲染下部角色列表(带开按钮)，并根据15秒控制显隐 ----------
+    function renderRoleGameList(showKai = false) {
+      if (allPlayers.length === 0) {
+        roleGameListDiv.innerHTML = '<span style="color:#c7b58b;">暂无角色</span>';
+        return;
+      }
+      let html = '';
+      // 按照固定角色顺序展示，更整齐
+      FIXED_ROLES.forEach(role => {
+        const player = allPlayers.find(p => p.role === role);
+        if (!player) return; // 不在线不显示
+        const hasDice = roundDicePoints && roundDicePoints[role]; // 本轮是否有骰子点数
+        // 是否显示开按钮: 骰子停止后15秒为true, 并且当前有该角色点数
+        const kaiVisible = showKai && hasDice;
+        // 我自己不可点自己的开? 允许点击，但用于查看；都可以
+        const isActiveRole = (currentDisplayRole === role);
+        const activeStyle = isActiveRole ? 'border: 3px solid #ffd966; background:#4a412a;' : '';
+        html += `<div class="role-item" style="${activeStyle}">
+                    <i class="fa fa-male"></i> ${role}`;
+        if (hasDice) {
+          html += `<span style="color:#eac358;font-size:0.7rem;">🎲已投</span>`;
+        }
+        // 开按钮: 默认隐藏，showKai 为 true 时显示
+        if (kaiVisible) {
+          html += `<button class="kai-btn" data-role="${role}">开</button>`;
+        } else {
+          // 占位隐藏，为了不变布局 不显示按钮
+        }
+        html += `</div>`;
+      });
+      if (html === '') html = '<span style="color:#c7b58b;">暂无在线角色</span>';
+      roleGameListDiv.innerHTML = html;
+
+      // 绑定“开”按钮事件
+      if (showKai) {
+        document.querySelectorAll('.kai-btn').forEach(btn => {
+          btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const targetRole = this.dataset.role;
+            if (roundDicePoints[targetRole]) {
+              // 切换中部骰子显示为目标角色的点数
+              setDiceFaces(roundDicePoints[targetRole]);
+              currentDisplayRole = targetRole;
+              // 刷新高亮样式
+              renderRoleGameList(true);
+            }
+          });
+        });
+      }
+    }
+
+    // 辅助: 设置5个骰子界面点数
+    function setDiceFaces(diceArray) {
+      const diceDivs = document.querySelectorAll('.dice');
+      if (!diceArray || diceArray.length < 5) return;
+      diceDivs.forEach((div, idx) => {
+        const val = diceArray[idx];
+        div.textContent = getDiceFace(val);
+      });
+    }
+
+    // 数字1-6转骰子字符
+    function getDiceFace(val) {
+      const faces = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+      return faces[val-1] || '⚀';
+    }
+
+    // ---------- 骰子滚动动画 ----------
+    function startRollAnimation() {
+      if (rollTimer) clearInterval(rollTimer);
+      isRolling = true;
+      rollBtn.classList.add('disabled');
+      // 动画: 快速随机变化
+      rollTimer = setInterval(() => {
+        const diceDivs = document.querySelectorAll('.dice');
+        diceDivs.forEach(div => {
+          const rand = Math.floor(Math.random() * 6) + 1;
+          div.textContent = getDiceFace(rand);
+        });
+      }, 80);
+    }
+
+    function stopRollAnimationAndShow(role) {
+      if (rollTimer) {
+        clearInterval(rollTimer);
+        rollTimer = null;
+      }
+      isRolling = false;
+      // 显示该角色的点数
+      if (role && roundDicePoints[role]) {
+        setDiceFaces(roundDicePoints[role]);
+        currentDisplayRole = role;
+      } else {
+        // 降级: 如果当前没有角色点数(极小概率) 显示默认
+      }
+    }
+
+    // ---------- 重置本轮就绪相关(准备下一轮) 此处简化，可重新扔--------
+    function resetForNextRound() {
+      // 不清除点数，但15秒开按钮会消失，由服务器重新控制
+    }
+
+    // ---------- socket 事件监听 ----------
+    socket.on('connect', () => {
+      console.log('socket connected', socket.id);
+    });
+
+    // 服务器推送最新玩家列表
+    socket.on('playersUpdate', (players) => {
+      allPlayers = players || [];
+      occupiedRoles = allPlayers.map(p => p.role);
+      // 若我的角色不在里面，说明我被踢出或掉线，清空myRole
+      if (myRole && !allPlayers.find(p => p.role === myRole)) {
+        myRole = null;
+        // 强制刷新
+      }
+      renderOnlinePlayers();
+      renderRoleSelector();
+      // 下部角色列表渲染（保留开按钮状态，但此处需要知道是否应该显示开，由服务器标志，我们借助gamePhase）
+      // 目前保持原开按钮显示状态，由下面diceStopped事件触发15s计时器决定。
+    });
+
+    // 选择角色结果反馈
+    socket.on('roleAssigned', ({ success, role, message }) => {
+      if (success) {
+        myRole = role;
+        currentDisplayRole = role; // 初始显示自己的骰子(如果有)
+        renderRoleSelector();
+        // 如果已有点数，显示自己的
+        if (roundDicePoints && roundDicePoints[role]) {
+          setDiceFaces(roundDicePoints[role]);
+          currentDisplayRole = role;
+        }
+      } else {
+        alert(message || '角色选择失败，可能已被选走');
+      }
+    });
+
+    // 收到服务器通知：所有玩家已扔，开始掷骰子！
+    socket.on('startRoll', ({ roundPoints }) => {
+      // roundPoints: { 建广: [1,3,5,2,6], ... } 所有角色点数
+      roundDicePoints = roundPoints || {};
+      isAllReadyTriggered = false;
+
+      // 1. 开始动画
+      startRollAnimation();
+      gamePhaseInfo.innerText = '🎲 骰子滚动中...';
+
+      // 2. 设定2.6秒后停止动画 (同时显示当前显示角色的点数)
+      setTimeout(() => {
+        if (isRolling) {
+          stopRollAnimationAndShow(myRole); // 默认显示我自己的点数
+          gamePhaseInfo.innerText = '🎲 点数已定 · 15秒后开牌';
+          // 启动15秒后显示开按钮
+          if (kaiVisibleTimer) clearTimeout(kaiVisibleTimer);
+          kaiVisibleTimer = setTimeout(() => {
+            // 所有角色旁边出现"开"
+            renderRoleGameList(true);  // 显示开按钮
+            gamePhaseInfo.innerText = '👆 点击“开”查看他人骰子';
+          }, 15000); // 15s
+        }
+      }, 2600); // 动画持续2.6s
+    });
+
+    // 新玩家点击扔，服务器转发ready状态，但无须前端额外处理
+    socket.on('someoneReady', ({ role }) => {
+      // 可以提示，略
+    });
+
+    // 错误/通知
+    socket.on('errorMsg', ({ message }) => {
+      alert(message);
+    });
+
+    // ---------- 界面交互: 点击扔按钮 ----------
+    rollBtn.addEventListener('click', () => {
+      if (!myRole) {
+        alert('请先选择角色！');
+        return;
+      }
+      if (isRolling) {
+        alert('骰子正在滚动，请稍后');
+        return;
+      }
+      // 通知服务器：我准备好扔了
+      socket.emit('playerReady', { role: myRole });
+    });
+
+    // ---------- 角色选择: 通过事件委托 ----------
+    roleSelectorArea.addEventListener('click', (e) => {
+      const target = e.target.closest('.role-btn');
+      if (!target) return;
+      if (target.classList.contains('disabled') && !target.classList.contains('available')) return;
+      const role = target.dataset.role;
+      if (!role) return;
+      if (myRole) {
+        alert('你已经选择过角色了，不能更换');
+        return;
+      }
+      // 检查是否已占用
+      if (occupiedRoles.includes(role)) {
+        alert('此角色已被选走');
+        return;
+      }
+      // 发送选择角色
+      socket.emit('selectRole', { role });
+    });
+
+    // 初始化角色选择器
+    renderRoleSelector();
+    // 请求初始列表
+    socket.on('connect', () => {
+      // 触发更新
+    });
+
+    // 监听断开等
+    window.addEventListener('beforeunload', () => {
+      socket.disconnect();
+    });
+
+  })();
+</script>
+
+<!-- 后端部分将提供Socket.IO服务，需将以下代码保存为server.js使用node运行，此处为前端兼容示意，实际一体可用。  
+     为完成展示，需在下方内嵌后端代码逻辑（纯前端无法多人在线），建议将此文本保存为 index.html，并配合server.js。
+     完整功能需运行Node服务器。
+-->
+</body>
+</html>
