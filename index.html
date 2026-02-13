@@ -299,7 +299,10 @@
 <script>
   (function(){
     // ---------- 全局变量 & socket 初始化 ----------
-    const socket = io();
+    const socket = io({
+  transports: ['polling'], // 只使用长轮询，禁用 WebSocket
+  upgrade: false           // 禁止自动升级到 WebSocket
+});
 
     // 当前客户端状态
     let myRole = null;                // 我自己选择的角色(null表示未选)
